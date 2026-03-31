@@ -62,7 +62,7 @@ export default function attachWebSocketServer(server) {
     });
   });
 
-  wss.on("connection", async (socket, req) => {
+  wss.on("connection", (socket, req) => {
 
 
     socket.isAlive = true;
