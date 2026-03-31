@@ -14,28 +14,56 @@ function broadcast(wss, payLoad) {
     client.send(JSON.stringify(payLoad));
   }
 }
+function rejectUpgrade(socket, statusCode, message) {
+  socket.write(
+    `HTTP/1.1 ${statusCode} ${message}\r\n` +
+    `Connection: close\r\n` +
+    `Content-Type: text/plain\r\n` +
+    `Content-Length: ${Buffer.byteLength(message)}\r\n` +
+    `\r\n` +
+    message
+  );
+  socket.destroy();
+}
+
 
 export default function attachWebSocketServer(server) {
-  const wss = new WebSocketServer({server,path: "/ws",maxPayload: 1024 * 1024,});
+  const wss = new WebSocketServer({noServer : true,maxPayload: 1024 * 1024,});
 
-  wss.on("connection", async (socket, req) => {
+  // Arcjet check BEFORE handshake
+  server.on("upgrade", async (req, socket, head) => {
+    if (req.url !== "/ws") {
+      rejectUpgrade(socket, 404, "Not Found");
+      return;
+    }
+
     if (wsArcjet) {
       try {
         const decision = await wsArcjet.protect(req);
+
         if (decision.isDenied()) {
-          const code = decision.reason.isRateLimit() ? 1013 : 1008;
-          const reason = decision.reason.isRateLimit()
-            ? "Rate limit exceeded"
-            : "Access denied";
-          socket.close(code, reason);
+          if (decision.reason.isRateLimit()) {
+            rejectUpgrade(socket, 429, "Rate limit exceeded");
+          } else {
+            rejectUpgrade(socket, 403, "Access denied");
+          }
           return;
         }
       } catch (e) {
-        console.error("WS Connection Error", e);
-        socket.close(1011, "Server security error");
+        console.error("WS Upgrade Error", e);
+        rejectUpgrade(socket, 500, "Server security error");
         return;
       }
     }
+
+    // Arcjet passed — complete the handshake
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit("connection", ws, req);
+    });
+  });
+
+  wss.on("connection", async (socket, req) => {
+
 
     socket.isAlive = true;
     socket.on("pong", () => {
@@ -54,7 +82,6 @@ export default function attachWebSocketServer(server) {
     });
   }, 30000);
 
-  // ✅ ADD THIS (cleanup)
   wss.on("close", () => {
     clearInterval(interval);
   });
