@@ -26,12 +26,15 @@ function rejectUpgrade(socket, statusCode, message) {
   socket.end(response);
 }
 
-
 export default function attachWebSocketServer(server) {
-  const wss = new WebSocketServer({noServer : true,maxPayload: 1024 * 1024,});
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
+  const onUpgradeSocketError = (err) => {
+    console.error("WS pre-upgrade socket error", err);
+  };
 
   // Arcjet check BEFORE handshake
   server.on("upgrade", async (req, socket, head) => {
+    socket.on("error", onUpgradeSocketError);
     if (req.url !== "/ws") {
       rejectUpgrade(socket, 404, "Not Found");
       return;
@@ -55,6 +58,8 @@ export default function attachWebSocketServer(server) {
         return;
       }
     }
+    if (socket.destroyed) return;
+    socket.removeListener("error", onUpgradeSocketError);
 
     // Arcjet passed — complete the handshake
     wss.handleUpgrade(req, socket, head, (ws) => {
@@ -63,8 +68,6 @@ export default function attachWebSocketServer(server) {
   });
 
   wss.on("connection", (socket, req) => {
-
-
     socket.isAlive = true;
     socket.on("pong", () => {
       socket.isAlive = true;
