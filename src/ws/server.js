@@ -15,15 +15,15 @@ function broadcast(wss, payLoad) {
   }
 }
 function rejectUpgrade(socket, statusCode, message) {
-  socket.write(
+  const response =
     `HTTP/1.1 ${statusCode} ${message}\r\n` +
     `Connection: close\r\n` +
     `Content-Type: text/plain\r\n` +
     `Content-Length: ${Buffer.byteLength(message)}\r\n` +
     `\r\n` +
-    message
-  );
-  socket.destroy();
+    message;
+
+  socket.end(response);
 }
 
 
