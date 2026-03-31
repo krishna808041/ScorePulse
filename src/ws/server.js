@@ -32,12 +32,35 @@ export default function attachWebSocketServer(server) {
     console.error("WS pre-upgrade socket error", err);
   };
 
+<<<<<<< Updated upstream
   // Arcjet check BEFORE handshake
   server.on("upgrade", async (req, socket, head) => {
     socket.on("error", onUpgradeSocketError);
     if (req.url !== "/ws") {
       rejectUpgrade(socket, 404, "Not Found");
       return;
+=======
+    wss.on("connection",(socket)=>{
+        socket.isAlive = true;
+        socket.on("pong",()=>{
+            socket.isAlive=true;
+        })
+        sendJson(socket,{type : 'WelCome'});
+
+        socket.on('error',console.error);
+    });
+
+    const interval = setInterval(()=>{
+        wss.clients.forEach((ws)=>{
+            if(ws.isAlive===false)  ws.terminate();
+            ws.isAlive = false;
+            ws.ping();
+        })
+    },30000)
+
+    function broadcastMatchCreated(match){
+        broadcast(wss, {type : 'match_created' , data : match});
+>>>>>>> Stashed changes
     }
 
     if (wsArcjet) {
