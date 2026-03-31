@@ -1,8 +1,9 @@
 import express from "express";
 import connectDB  from "./db/db.js";
 import http from "http";
-import { createMatchRouter } from "./routes/matches.js";
+import createMatchRouter from "./routes/matches.js";
 import attachWebSocketServer from "./ws/server.js"
+import { securityMiddleware } from "./arcjet.js";
 
 
 const PORT = Number(process.env.PORT) || 8080;
@@ -23,7 +24,10 @@ app.get("/", (req, res) => {
 
 const { broadcastMatchCreated } = attachWebSocketServer(server);
 
+app.use(securityMiddleware())
+
 app.use("/matches",createMatchRouter(broadcastMatchCreated));
+
 
 
 
