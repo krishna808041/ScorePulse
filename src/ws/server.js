@@ -3,6 +3,8 @@ import { wsArcjet } from "../arcjet.js";
 
 const matchSubscriber = new Map();
 
+const MAX_SUBSCRIPTIONS_PER_SOCKET = 100;
+
 function subscribe(matchId, socket) {
   if (!matchSubscriber.has(matchId)) {
     matchSubscriber.set(matchId, new Set());
@@ -19,13 +21,12 @@ function unsubscribe(matchId, socket) {
   }
 }
 
-function cleanupSubscriptions(socket){
+function cleanupSubscriptions(socket) {
   if (!socket.subscriptions) return;
-  for(const matchId of socket.subscriptions){
-    unsubscribe(matchId,socket)
+  for (const matchId of socket.subscriptions) {
+    unsubscribe(matchId, socket);
   }
 }
-
 
 function sendJson(socket, payLoad) {
   if (socket.readyState !== WebSocket.OPEN) return;
@@ -39,46 +40,69 @@ function broadcastToAll(wss, payLoad) {
   }
 }
 
-function broadcastToMatch(matchId , payload){
+function broadcastToMatch(matchId, payload) {
   const subscribers = matchSubscriber.get(matchId);
 
-  if(!subscribers || subscribers.size===0) return;
+  if (!subscribers || subscribers.size === 0) return;
 
   const message = JSON.stringify(payload);
 
-  for(const client of subscribers){
-    if(client.readyState === WebSocket.OPEN){
+  for (const client of subscribers) {
+    if (client.readyState === WebSocket.OPEN) {
       client.send(message);
     }
   }
 }
 
-
-
-function handleMessage(socket,data){
-  let message ;
+function handleMessage(socket, data) {
+  let message;
 
   try {
-      message = JSON.parse(data.toString());
-  } catch (e) {
-    sendJson(socket , {type : 'error' , message : 'Invalid JSON'});
+    message = JSON.parse(data.toString());
+  } catch {
+    sendJson(socket, { type: "error", message: "Invalid JSON" });
     return;
   }
 
-  if(message?.type === "subscribe" && typeof message.matchId === "string" && message.matchId.trim() !== ""){
-    subscribe(message.matchId,socket);
-    socket.subscriptions.add(message.matchId);
-    sendJson(socket , {type : 'subscribed' , matchId : message.matchId});
+  // ── SUBSCRIBE ─────────────────────────────────────────────
+  if (message?.type === "subscribe" && typeof message.matchId === "string") {
+    const matchId = message.matchId.trim().toLowerCase();
+
+    // Validate MongoDB ObjectId format
+    if (!/^[a-f\d]{24}$/i.test(matchId)) {
+      sendJson(socket, { type: "error", message: "Invalid matchId" });
+      return;
+    }
+
+    // Enforce per-socket subscription cap
+    if (
+      !socket.subscriptions.has(matchId) &&
+      socket.subscriptions.size >= MAX_SUBSCRIPTIONS_PER_SOCKET
+    ) {
+      sendJson(socket, { type: "error", message: "Too many subscriptions" });
+      return;
+    }
+
+    subscribe(matchId, socket);
+    socket.subscriptions.add(matchId);
+
+    sendJson(socket, { type: "subscribed", matchId });
     return;
   }
 
-  if(message?.type === "unsubscribe" && typeof message.matchId === "string" && message.matchId.trim() !== ""){
-    unsubscribe(message.matchId,socket);
-    socket.subscriptions.delete(message.matchId);
-    sendJson(socket , {type : 'unsubscribed' , matchId : message.matchId});
+  // ── UNSUBSCRIBE ───────────────────────────────────────────
+  if (message?.type === "unsubscribe" && typeof message.matchId === "string") {
+    const matchId = message.matchId.trim().toLowerCase();
+
+    unsubscribe(matchId, socket);
+    socket.subscriptions.delete(matchId);
+
+    sendJson(socket, { type: "unsubscribed", matchId });
     return;
   }
 
+  // ── UNKNOWN MESSAGE TYPE ─────────────────────────────────
+  sendJson(socket, { type: "error", message: "Unknown message type" });
 }
 
 function rejectUpgrade(socket, statusCode, message) {
@@ -146,19 +170,18 @@ export default function attachWebSocketServer(server) {
 
     sendJson(socket, { type: "Welcome" });
 
-    socket.on('message',(data)=>{
-      handleMessage(socket,data);
+    socket.on("message", (data) => {
+      handleMessage(socket, data);
     });
 
-
-    socket.on("error",()=>{
-      console.error;
+    socket.on("error", () => {
+      console.error("WebSocket connection error", err);
       socket.terminate();
     });
 
-    socket.on('close',()=>{
+    socket.on("close", () => {
       cleanupSubscriptions(socket);
-    })
+    });
   });
 
   const interval = setInterval(() => {
@@ -177,9 +200,9 @@ export default function attachWebSocketServer(server) {
     broadcastToAll(wss, { type: "match_created", data: match });
   }
 
-  function broadcastCommentary(matchId , comment){
-    broadcastToMatch(matchId , {type : 'commentary' , data : comment});
+  function broadcastCommentary(matchId, comment) {
+    broadcastToMatch(matchId, { type: "commentary", data: comment });
   }
 
-  return { broadcastMatchCreated , broadcastCommentary};
+  return { broadcastMatchCreated, broadcastCommentary };
 }

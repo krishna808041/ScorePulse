@@ -4,16 +4,13 @@ import {
   listCommentaryQuerySchema,
   matchIdParamsSchema,
 } from "../validations/commentary.js";
-import { Commentary } from "../db/schema.js";
+import { Commentary , Match } from "../db/schema.js";
 import { Console } from "console";
-
-// console.log("matchIdParamsSchema:", matchIdParamsSchema); // ← add this
-// console.log("createCommentarySchema:", createCommentarySchema); // ← add this
+import { MAX_COMMENTARY_LIMIT } from "../constants/commentary.js";
 
 export const commentaryRouter = Router({ mergeParams: true });
 
 commentaryRouter.get("/", async (req, res) => {
-  const MAX_LIMIT = 50;
   const paramsResult = matchIdParamsSchema.safeParse(req.params);
   if (!paramsResult.success) {
     return res.status(400).json({
@@ -32,18 +29,17 @@ commentaryRouter.get("/", async (req, res) => {
 
   try {
     const id = paramsResult.data.id;
-    const limit = Math.min(queryResult.data.limit ?? 50, MAX_LIMIT);
+    const limit = Math.min(queryResult.data.limit ?? MAX_COMMENTARY_LIMIT, MAX_COMMENTARY_LIMIT);
     const data = await Commentary.find({matchId : id}).sort({ createdAt: -1 }).limit(limit);
 
     return res.status(200).json({ data });
   } catch (e) {
-    return res.status(500).json({ error: "Failed to list matches." });
+    return res.status(500).json({ error: "Failed to list commentary." });
   }
 });
 
 commentaryRouter.post("/", async (req, res) => {
-  console.log("BODY:", req.body); // ✅ ADD THIS
-  console.log("PARAMS:", req.params);
+
   const paramsResult = matchIdParamsSchema.safeParse(req.params);
   if (!paramsResult.success) {
     return res
@@ -60,6 +56,11 @@ commentaryRouter.post("/", async (req, res) => {
   }
 
   try {
+    const matchExists = await Match.exists({ _id: paramsResult.data.id });
+    if (!matchExists) {
+        return res.status(404).json({ error: "Match not found" });
+    }
+
     const { minute, ...rest } = bodyResult.data;
 
     const result = await Commentary.create({

@@ -1,8 +1,9 @@
 // src/validations/commentary.js
 import { z } from "zod";
+import { MAX_COMMENTARY_LIMIT } from "../constants/commentary.js";
 
 export const listCommentaryQuerySchema = z.object({
-  limit: z.coerce.number().int().positive().max(100).optional(),
+  limit: z.coerce.number().int().positive().max(MAX_COMMENTARY_LIMIT).optional(),
 });
 
 export const createCommentarySchema = z.object({
@@ -12,7 +13,7 @@ export const createCommentarySchema = z.object({
   eventType: z.string().optional(),
   actor: z.string().optional(),
   team: z.string().optional(),
-  message: z.string().min(1),
+  message: z.string().trim().min(1),
   metadata: z.object({}).catchall(z.unknown()).optional(),
   tags: z.array(z.string()).optional(),
 });
