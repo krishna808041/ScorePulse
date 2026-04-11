@@ -24,7 +24,7 @@ export default function createMatchRouter(broadcastMatchCreated) {
     try {
       const data = await Match.find().sort({ createdAt: -1 }).limit(limit);
 
-      return res.json({ data });
+      return res.status(200).json({ data });
     } catch (e) {
       return res.status(500).json({ error: "Failed to list matches." });
     }

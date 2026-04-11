@@ -38,6 +38,8 @@ export const wsArcjet = arcjetKey
 
 export function securityMiddleware() {
   return async (req, res, next) => {
+    console.log("arcjetKey:", arcjetKey);       // should be undefined
+    console.log("httpArcjet:", httpArcjet);
     if (!httpArcjet) return next();
 
     try {
