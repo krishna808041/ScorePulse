@@ -1,0 +1,1 @@
+export const MAX_COMMENTARY_LIMIT = 50;
